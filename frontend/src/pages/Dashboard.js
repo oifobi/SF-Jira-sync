@@ -61,6 +61,14 @@ const RULE_META = [
     action: 'Cases open >48h with no JIRA progress flagged + priority bumped',
     color: '#ef4444',
   },
+  {
+    id: 'CASE_COUNT_ESCALATION',
+    icon: '⚡',
+    name: 'Case Count Escalation',
+    trigger: 'Each sync run',
+    action: 'When active cases ≥ threshold, bumps JIRA priority to P0 (Highest) or P1 (High)',
+    color: '#ec4899',
+  },
 ];
 
 // ── RuleRow ───────────────────────────────────────────────────────────────────

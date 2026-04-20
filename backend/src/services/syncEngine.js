@@ -28,6 +28,11 @@ const PRIORITY_JIRA_TO_SF = Object.fromEntries(
   Object.entries(PRIORITY_SF_TO_JIRA).map(([sf, jira]) => [jira, sf])
 );
 
+const CASE_COUNT_PRIORITY_MAP = {
+  P0: 'Highest',
+  P1: 'High',
+};
+
 const DEFAULT_FIELD_MAPPINGS = {
   Case: [
     { salesforceField: 'Subject',     jiraField: 'summary'     },
@@ -422,6 +427,46 @@ class SyncEngine {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // RULE 6 — CASE COUNT ESCALATION
+  // When active cases in config reach threshold, auto-bump JIRA priority to P0/P1.
+  // ══════════════════════════════════════════════════════════════════════════
+  async ruleCaseCountEscalation(config, syncRecord, activeCount, ruleStats) {
+    const rules = config.rules || {};
+    if (rules.caseCountEscalation === false) return;
+
+    const threshold = rules.caseCountThreshold ?? 10;
+    const priorityKey = rules.caseCountPriority ?? 'P1';
+    const jiraPriority = CASE_COUNT_PRIORITY_MAP[priorityKey] ?? 'High';
+
+    if (activeCount < threshold) return;
+
+    ruleStats.fired++;
+    try {
+      // Fetch current JIRA issue to check existing priority
+      const jiraIssue = await jiraService.getIssueByKey(syncRecord.jiraIssueKey);
+      const currentPriority = jiraIssue.fields.priority?.name;
+
+      // Only update if priority differs
+      if (currentPriority === jiraPriority) {
+        logger.info(`[CASE_COUNT_ESCALATION] ${syncRecord.jiraIssueKey}: already at ${jiraPriority}`);
+        return;
+      }
+
+      await jiraService.updateIssue(syncRecord.jiraIssueKey, { priority: jiraPriority });
+      await jiraService.addComment(
+        syncRecord.jiraIssueKey,
+        `⚡ Priority auto-escalated to ${priorityKey} (${jiraPriority}) — config has reached ${activeCount} active cases (threshold: ${threshold}).`
+      );
+
+      logger.info(`[CASE_COUNT_ESCALATION] ${syncRecord.jiraIssueKey}: priority → ${jiraPriority} (${activeCount}/${threshold} cases)`);
+      ruleStats.succeeded++;
+    } catch (err) {
+      ruleStats.failed++;
+      logger.error(`[CASE_COUNT_ESCALATION] error for ${syncRecord.jiraIssueKey}:`, err.message);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // CORE SYNC PASSES
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -438,11 +483,12 @@ class SyncEngine {
     };
 
     const ruleStats = {
-      STATUS_SYNC:    makeRuleStat(),
-      PRIORITY_SYNC:  makeRuleStat(),
-      COMMENT_MIRROR: makeRuleStat(),
-      AUTO_CLOSE:     makeRuleStat(),
-      ESCALATION:     makeRuleStat(),
+      STATUS_SYNC:             makeRuleStat(),
+      PRIORITY_SYNC:           makeRuleStat(),
+      COMMENT_MIRROR:          makeRuleStat(),
+      AUTO_CLOSE:              makeRuleStat(),
+      ESCALATION:              makeRuleStat(),
+      CASE_COUNT_ESCALATION:   makeRuleStat(),
     };
 
     try {
@@ -454,6 +500,9 @@ class SyncEngine {
       );
 
       logEntry.recordsProcessed = sfRecords.length;
+
+      // Count active records for case count escalation rule
+      const activeCount = await SyncRecord.countDocuments({ configId: config._id, status: 'ACTIVE' });
 
       for (const record of sfRecords) {
         try {
@@ -526,6 +575,9 @@ class SyncEngine {
             );
             await this.ruleEscalation(
               syncRecord, record, jiraIssue, config, ruleStats.ESCALATION
+            );
+            await this.ruleCaseCountEscalation(
+              config, syncRecord, activeCount, ruleStats.CASE_COUNT_ESCALATION
             );
           }
 

@@ -28,6 +28,9 @@ const EMPTY_CONFIG = {
     autoClose: true,
     escalation: true,
     escalationThresholdHours: 48,
+    caseCountEscalation: false,
+    caseCountThreshold: 10,
+    caseCountPriority: 'P1',
   },
 };
 
@@ -37,6 +40,7 @@ const RULE_LABELS = [
   { key: 'commentMirror', label: 'Comment Mirror',  desc: 'Sync comments both ways (1h window)' },
   { key: 'autoClose',     label: 'Auto-Close',      desc: 'Close SF case when JIRA → Done' },
   { key: 'escalation',    label: 'Escalation',      desc: 'Flag stale cases after threshold hours' },
+  { key: 'caseCountEscalation', label: 'Case Count Escalation', desc: 'Auto-bump to P0/P1 when cases reach threshold' },
 ];
 
 function ConfigModal({ config, onClose, onSave }) {
@@ -227,6 +231,32 @@ function ConfigModal({ config, onClose, onSave }) {
                     setRule('escalationThresholdHours', parseInt(e.target.value, 10))
                   }
                 />
+              </div>
+            )}
+            {form.rules?.caseCountEscalation !== false && (
+              <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
+                <div className="form-group">
+                  <label>Case Threshold</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={form.rules?.caseCountThreshold ?? 10}
+                    onChange={(e) =>
+                      setRule('caseCountThreshold', parseInt(e.target.value, 10))
+                    }
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Target Priority</label>
+                  <select
+                    value={form.rules?.caseCountPriority ?? 'P1'}
+                    onChange={(e) => setRule('caseCountPriority', e.target.value)}
+                  >
+                    <option value="P1">P1 (High)</option>
+                    <option value="P0">P0 (Highest)</option>
+                  </select>
+                </div>
               </div>
             )}
           </div>

@@ -121,6 +121,9 @@ const configSchema = new mongoose.Schema(
       autoClose:                { type: Boolean, default: true },
       escalation:               { type: Boolean, default: true },
       escalationThresholdHours: { type: Number,  default: 48  },
+      caseCountEscalation:      { type: Boolean, default: false },
+      caseCountThreshold:       { type: Number,  default: 10 },
+      caseCountPriority:        { type: String,  default: 'P1', enum: ['P0', 'P1'] },
     },
   },
   { timestamps: true }
